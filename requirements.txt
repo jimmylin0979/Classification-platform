@@ -1,0 +1,19 @@
+# Usage: pip install -r requirements.txt
+
+# Base ----------------------------------------
+numpy
+opencv_python
+scikit_learn
+timm
+torch
+torchtoolbox
+torchvision
+torch_tb_profiler
+tensorboard
+ema_pytorch
+ptflops
+tqdm
+PyYAML
+
+# Export --------------------------------------
+# Visualize -----------------------------------
