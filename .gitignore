@@ -3,6 +3,7 @@
 
 ### Checkpoints ###
 results
+*log*.txt
 
 ### Datas ###
 data/cifar-100-python

@@ -73,7 +73,9 @@ def main_train(opts):
     # Optimizer
     lr = getattr(opts, "optimizer.learning_rate", 1e-5)
     weight_decay = getattr(opts, "optimizer.weight_decay", 1e-8)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    # optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer_base = torch.optim.SGD
+    optimizer = SAM(model.parameters(), optimizer_base, lr=lr, momentum=0.9)
 
     # Scheduler
     max_epoch = getattr(opts, "scheduler.max_epoch", 100)
@@ -83,12 +85,13 @@ def main_train(opts):
     scheduler_cosine = lr_scheduler.CosineAnnealingLR(
         optimizer=optimizer, T_max=cosine_tmax_epoch, eta_min=cosine_eta_min
     )
-    scheduler = GradualWarmupScheduler(
-        optimizer=optimizer,
-        multiplier=1,
-        total_epoch=warmup_epoch,
-        after_scheduler=scheduler_cosine,
-    )
+    scheduler = scheduler_cosine
+    # scheduler = GradualWarmupScheduler(
+    #     optimizer=optimizer,
+    #     multiplier=1,
+    #     total_epoch=warmup_epoch,
+    #     after_scheduler=scheduler_cosine,
+    # )
 
     ### Mix-based augmentation ###
     #
@@ -103,7 +106,7 @@ def main_train(opts):
             "[WARNING] Attribute device_type is set to 'cuda', but platform did not detect cuda. Setting device to 'cpu'."
         )
         device_type = "cpu"
-    assert save_dir is not None, "Attribute save_dir should not be None"
+    assert save_dir is not None, "[ERROR] Attribute save_dir should not be None"
 
     # First check whether the existing save_dir have any useful information,
     #       if not, then we should remove the directory and create a new one

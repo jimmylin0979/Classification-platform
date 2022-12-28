@@ -18,7 +18,8 @@ class Registry:
 
     #### ************* BASE METHODS ************ ####
 
-    def _regsiter(self, name, )
+    def _regsiter(self, name):
+        pass
 
     def register(self, cls, suffix=None):
         """

@@ -10,6 +10,7 @@ from typing import Optional
 
 #
 from utils import logger, save_checkpoint, Mix
+from optim import enable_running_stats, disable_running_stats
 
 
 class Trainer(object):
@@ -101,7 +102,17 @@ class Trainer(object):
             # 1. mode == "none" if we did not use any mix augmentation
             mode, inputs, target_a, target_b, lam = self.mix.forward(inputs, targets)
 
+            # closure function for SAM (Sharpness-Aware Minimization)
+            def closure():
+                disable_running_stats(self.model)
+                loss = self.mix.mix_criterion(
+                    mode, self.criterion, self.model(inputs), target_a, target_b, lam
+                )
+                loss.backward()
+                return loss
+
             #
+            enable_running_stats(self.model)
             logits = self.model(inputs)
 
             # Compute loss and then start back-propagation
@@ -109,9 +120,15 @@ class Trainer(object):
             loss = self.mix.mix_criterion(
                 mode, self.criterion, logits, target_a, target_b, lam
             )
-            self.optimizer.zero_grad()
             loss.backward()
-            self.optimizer.step()
+            self.optimizer.first_step(zero_grad=True)
+
+            #
+            disable_running_stats(self.model)
+            self.mix.mix_criterion(
+                mode, self.criterion, self.model(inputs), target_a, target_b, lam
+            ).backward()
+            self.optimizer.second_step(zero_grad=True)
 
             # EMA
             # update the moving average with the new parameters from the last optimizer step
@@ -216,7 +233,7 @@ class Trainer(object):
         #
         # this zero gradient update is needed to avoid a warning message, issue #8.
         self.optimizer.zero_grad()
-        self.optimizer.step()
+        # self.optimizer.step()
 
         # TODO: Provide model profilier
         # # Do some iterations to profile the whole model
