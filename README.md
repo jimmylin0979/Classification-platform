@@ -1,5 +1,16 @@
 # torch-Classification
 
+## What is torch-Classification ? 
+---
+
+`torch-Classification` is a flexible pytorch repository for classification task only (currently),  
+you can just clone this repository as your classification project base.
+
+Since the components are well seperated, you can add your own model without the worry to affect other classification modules. 
+
+I have used this repository as my porject base and complete many classification task with good score, hope this repo will be helpful to you.
+
+
 ## Getting Start
 ---
 
@@ -13,6 +24,8 @@ pip install -r requirements.txt
 
 ### Training
 
+Take swin transformer as example, we can start training a model follow the configuration wrote in `configs/swin_transformer.yaml`, and save the checkpoints into folder `results/swin`
+
 ```bash
 python main.py --mode=train --config=configs/swin_transformer.yaml --save-dir=results/swin
 ```
@@ -22,6 +35,13 @@ python main.py --mode=train --config=configs/swin_transformer.yaml --save-dir=re
 ```bash
 python main.py --mode=eval --save-dir=results/swin
 ```
+
+## Roadmap
+---
+
+- [ ] Explain AI, like CAM, heatmap, and so on ...
+- [ ] Support more and more SOTA models
+- [ ] More friendly startup tutorial
 
 
 ## Acknowledge
@@ -36,6 +56,9 @@ python main.py --mode=eval --save-dir=results/swin
 
 ## Cite
 ---
+
+Please notice me if i miss cite any author.  
+
 
 ```bibtex
 @inproceedings{foret2021sharpnessaware,
