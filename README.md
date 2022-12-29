@@ -42,6 +42,8 @@ python main.py --mode=eval --save-dir=results/swin
 - [ ] Explain AI, like CAM, heatmap, and so on ...
 - [ ] Support more and more SOTA models
 - [ ] More friendly startup tutorial
+- [ ] AMP (currently unavailable due to the use of SAM optimizer)
+- [ ] Continue ... 
 
 
 ## Acknowledge
