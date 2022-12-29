@@ -19,7 +19,7 @@ class Evaluator(object):
         model: torch.nn.Module,
         model_ema,
         eval_loader: torch.utils.data.DataLoader,
-        img_names: Optional[list[str]] = None,
+        img_names: Optional[list] = None,
         label2class: Optional[dict] = None,
         device_type: Optional[str] = "cpu",
         *args,

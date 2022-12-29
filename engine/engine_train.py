@@ -177,6 +177,7 @@ class Trainer(object):
         model.eval()
 
         #
+        predictions = []
         loss_history, acc_history = [], []
         with torch.no_grad():
             for batch in self.valid_loader:
@@ -194,15 +195,25 @@ class Trainer(object):
                 acc_history.append(
                     (logits.argmax(dim=-1) == targets).float().mean().detach().item()
                 )
-
-        #
+                predictions.extend((logits.argmax(dim=-1).detach().tolist()))
 
         # Return training metrics and logs
         metric_acc = np.mean(acc_history)
         metric_loss = np.mean(loss_history)
         logger.info("Finish, Accuracy: {}, Loss: {}".format(metric_acc, metric_loss))
-        metrics = {"Accuracy": metric_acc, "Loss": metric_loss}
+        metrics = {
+            "Accuracy": metric_acc,
+            "Loss": metric_loss,
+            "Predictions": predictions,
+        }
         return metrics
+
+    def save_predictions(self, predictions, fileName="predictions.csv"):
+        #
+        with open(fileName, "w") as fw:
+            fw.write(f"ID,Category\n")
+            for i in range(len(predictions)):
+                fw.write(f"{i},{predictions[i]}\n")
 
     def write_log(
         self,
@@ -260,11 +271,19 @@ class Trainer(object):
             is_best = False
             if valid_metrics["Accuracy"] > self.best_model_metric:
                 self.best_model_metric = valid_metrics["Accuracy"]
+                self.save_predictions(
+                    valid_metrics["Predictions"],
+                    fileName=f"{self.save_dir}/predictions.csv",
+                )
                 is_best = True
 
             is_ema_best = False
             if valid_ema_metrics["Accuracy"] > self.best_model_ema_metric:
                 self.best_model_ema_metric = valid_ema_metrics["Accuracy"]
+                self.save_predictions(
+                    valid_metrics["Predictions"],
+                    fileName=f"{self.save_dir}/predictions_ema.csv",
+                )
                 is_ema_best = True
 
             # Model save checkpoint
