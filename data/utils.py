@@ -123,14 +123,27 @@ def create_train_valiad_loader(opts):
     logger.info(str(train_dataset.dataset.transform))
     logger.info(str(valid_dataset.dataset.transform))
 
+    # 
+    num_gpus = getattr(opts, "ddp.num_gpus", 0)
+    if num_gpus > 1:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            sampler=train_sampler,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+    else:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+
     # DataLoader preparation
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
     valid_loader = DataLoader(
         valid_dataset,
         batch_size=batch_size,

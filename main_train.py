@@ -1,6 +1,8 @@
 #
 import torch
 import torch.optim.lr_scheduler as lr_scheduler
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 #
 import os
@@ -20,7 +22,7 @@ from data import create_train_valiad_loader
 from engine import Trainer
 from optim import GradualWarmupScheduler, SAM
 from utils import logger, load_checkpoint, Mix
-
+from utils import ddp_utils as ddp
 
 def main_train(opts):
 
@@ -73,9 +75,10 @@ def main_train(opts):
     # Optimizer
     lr = getattr(opts, "optimizer.learning_rate", 1e-5)
     weight_decay = getattr(opts, "optimizer.weight_decay", 1e-8)
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    optimizer_base = torch.optim.SGD
-    optimizer = SAM(model.parameters(), optimizer_base, lr=lr, momentum=0.9)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    # TODO : Let user choose whether to use SAM as optimizer
+    # optimizer_base = torch.optim.SGD
+    # optimizer = SAM(model.parameters(), optimizer_base, lr=lr, momentum=0.9)
 
     # Scheduler
     max_epoch = getattr(opts, "scheduler.max_epoch", 100)
@@ -85,13 +88,12 @@ def main_train(opts):
     scheduler_cosine = lr_scheduler.CosineAnnealingLR(
         optimizer=optimizer, T_max=cosine_tmax_epoch, eta_min=cosine_eta_min
     )
-    scheduler = scheduler_cosine
-    # scheduler = GradualWarmupScheduler(
-    #     optimizer=optimizer,
-    #     multiplier=1,
-    #     total_epoch=warmup_epoch,
-    #     after_scheduler=scheduler_cosine,
-    # )
+    scheduler = GradualWarmupScheduler(
+        optimizer=optimizer,
+        multiplier=1,
+        total_epoch=warmup_epoch,
+        after_scheduler=scheduler_cosine,
+    )
 
     ### Mix-based augmentation ###
     #
@@ -100,7 +102,6 @@ def main_train(opts):
     ### Checkpoints ###
     # Check whether there exist checkpoint, if, restore from previous checkpoint
     save_dir = getattr(opts, "save_dir", None)
-    device_type = getattr(opts, "model.device_type", "cpu")
     if not torch.cuda.is_available() and device_type == "cuda":
         logger.info(
             "[WARNING] Attribute device_type is set to 'cuda', but platform did not detect cuda. Setting device to 'cpu'."
@@ -151,6 +152,27 @@ def main_train(opts):
         fileName = src.split("/")[-1]
         dst = f"{save_dir}/{fileName}"
         shutil.copyfile(src, dst)
+
+    #
+    
+    ### DistributedDataParallel Initialization ###
+    opts = ddp.setup(opts)
+    num_gpus = getattr(opts, "ddp.num_gpus", -1)
+    device_type = getattr(opts, "model.device_type", "cpu")
+
+    model = model.to(device_type)
+    if num_gpus == 1:
+        #
+        logger.info(f"Using Single GPU")
+    elif num_gpus > 1:
+        #
+        logger.info(f"Using Multiple GPUs ({num_gpus})")
+        
+        # 
+        local_rank = getattr(opts, "ddp.local_rank", -1)
+        torch.cuda.set_device(local_rank)
+        dist.init_process_group(backend="nccl")
+        model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
     ### Trainer ###
     # Create a Trainer instance and start training

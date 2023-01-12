@@ -2,6 +2,7 @@
 import torch
 import torch.cuda.amp as amp
 from torch.utils.tensorboard import SummaryWriter
+import torch.distributed as dist
 import numpy as np
 
 #
@@ -85,6 +86,9 @@ class Trainer(object):
         #
         logger.info("********************* Training *********************")
         self.model.train()
+
+        #
+        self.train_loader.sampler.set_epoch(epoch)
 
         #
         loss_history, acc_history = [], []
@@ -239,7 +243,7 @@ class Trainer(object):
         )
         self.writer.add_scalar(f"Valid/EMA_Loss", valid_ema_metric["Loss"], epoch)
 
-    def run(self):
+    def run(self, train_sampler):
 
         #
         # this zero gradient update is needed to avoid a warning message, issue #8.
@@ -267,7 +271,7 @@ class Trainer(object):
             valid_ema_metrics = self.valid_one_epoch(epoch, isEMA=True)
             gc.collect()
 
-            # Check whether current model is the best one, which we will store it latter
+            # Check whether current model is the best one, which we will store it latter        
             is_best = False
             if valid_metrics["Accuracy"] > self.best_model_metric:
                 self.best_model_metric = valid_metrics["Accuracy"]
@@ -290,18 +294,19 @@ class Trainer(object):
             # 1. save the current best model, model_ema
             # 2. save the last model, model_ema
             # 3. Do forget to save the info of optimizer, and so on
-            save_checkpoint(
-                epoch,
-                self.model,
-                is_best,
-                self.model_ema,
-                is_ema_best,
-                self.optimizer,
-                self.gradient_scaler,
-                self.save_dir,
-                best_model_metric=self.best_model_metric,
-                best_model_ema_metric=self.best_model_ema_metric,
-            )
+            if dist.get_rank() == 0:
+                save_checkpoint(
+                    epoch,
+                    self.model,
+                    is_best,
+                    self.model_ema,
+                    is_ema_best,
+                    self.optimizer,
+                    self.gradient_scaler,
+                    self.save_dir,
+                    best_model_metric=self.best_model_metric,
+                    best_model_ema_metric=self.best_model_ema_metric,
+                )
 
             # Log
             lr = self.optimizer.param_groups[0]["lr"]
