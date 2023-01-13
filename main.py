@@ -23,16 +23,17 @@ if __name__ == "__main__":
 
     # 1. Use argument parser to deal with terminal inputs
     parser = ArgumentParser(description="torch-Classification")
+    parser.add_argument('--local_rank', default=-1, type=int, help='node rank for distributed training')
     parser.add_argument(
         "--mode",
         "-m",
         default="train",
-        required=True,
         help="The running mode,  whether to train or to evaluate",
     )
     parser.add_argument(
         "--config",
         "-cf",
+        default="configs/swin_transformer.yaml",
         help="The configuartion file containing hyper-parameters and other settings",
     )
     parser.add_argument(

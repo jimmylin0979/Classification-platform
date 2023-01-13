@@ -53,13 +53,15 @@ class Trainer(object):
         self.start_epoch = start_epoch
 
         #
-        self.device = torch.device(self.device_type)
+        local_rank = getattr(opts, "local_rank", -1)
+        self.device = torch.device(self.device_type, local_rank)
         if self.device_type != "cpu":
             # Manually move optimizer to GPU memory, seems like a bug in pytorch
             for state in self.optimizer.state.values():
                 for k, v in state.items():
                     if isinstance(v, torch.Tensor):
                         state[k] = v.cuda()
+        print(self.device)
         self.model.to(self.device)
         self.model_ema.to(self.device)
 
@@ -88,7 +90,8 @@ class Trainer(object):
         self.model.train()
 
         #
-        self.train_loader.sampler.set_epoch(epoch)
+        if isinstance(self.train_loader.sampler, torch.utils.data.distributed.DistributedSampler):
+            self.train_loader.sampler.set_epoch(epoch)
 
         #
         loss_history, acc_history = [], []
@@ -243,7 +246,7 @@ class Trainer(object):
         )
         self.writer.add_scalar(f"Valid/EMA_Loss", valid_ema_metric["Loss"], epoch)
 
-    def run(self, train_sampler):
+    def run(self):
 
         #
         # this zero gradient update is needed to avoid a warning message, issue #8.

@@ -22,9 +22,20 @@ from data import create_train_valiad_loader
 from engine import Trainer
 from optim import GradualWarmupScheduler, SAM
 from utils import logger, load_checkpoint, Mix
-from utils import ddp_utils as ddp
+# from utils import ddp_utils as ddp
 
 def main_train(opts):
+
+    # 
+    num_gpus = torch.cuda.device_count()
+    setattr(opts, "ddp.num_gpus", num_gpus)
+    if num_gpus > 1:
+        #
+        dist.init_process_group(backend="nccl")
+
+    is_master_node = False
+    if dist.get_rank() == 0:
+        is_master_node = True
 
     ### Create model (2 version, naive & EMA) ###
     model_type = getattr(opts, "model.model_type", "swin_transformer")
@@ -45,7 +56,7 @@ def main_train(opts):
 
     #
     # logger.info(summary(model, torch.randn(1, 3, input_resolution, input_resolution)))
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and is_master_node:
         with torch.cuda.device(0):
             macs, params = get_model_complexity_info(
                 model,
@@ -54,9 +65,9 @@ def main_train(opts):
                 print_per_layer_stat=False,
                 verbose=True,
             )
-            print(f"{model_type}")
-            print("{:<30}  {:<8}".format("Computational complexity: ", macs))
-            print("{:<30}  {:<8}".format("Number of parameters: ", params))
+            logger.info(f"{model_type}")
+            logger.info("{:<30}  {:<8}".format("Computational complexity: ", macs))
+            logger.info("{:<30}  {:<8}".format("Number of parameters: ", params))
 
     ### Create tran/valid dataset & dataloader ###
     (
@@ -75,10 +86,10 @@ def main_train(opts):
     # Optimizer
     lr = getattr(opts, "optimizer.learning_rate", 1e-5)
     weight_decay = getattr(opts, "optimizer.weight_decay", 1e-8)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    # optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     # TODO : Let user choose whether to use SAM as optimizer
-    # optimizer_base = torch.optim.SGD
-    # optimizer = SAM(model.parameters(), optimizer_base, lr=lr, momentum=0.9)
+    optimizer_base = torch.optim.SGD
+    optimizer = SAM(model.parameters(), optimizer_base, lr=lr, momentum=0.9)
 
     # Scheduler
     max_epoch = getattr(opts, "scheduler.max_epoch", 100)
@@ -102,10 +113,9 @@ def main_train(opts):
     ### Checkpoints ###
     # Check whether there exist checkpoint, if, restore from previous checkpoint
     save_dir = getattr(opts, "save_dir", None)
-    if not torch.cuda.is_available() and device_type == "cuda":
-        logger.info(
-            "[WARNING] Attribute device_type is set to 'cuda', but platform did not detect cuda. Setting device to 'cpu'."
-        )
+    device_type = getattr(opts, "model.device_type", "cpu")
+    if not torch.cuda.is_available() and device_type == "cuda" and is_master_node:
+        logger.info(f"[WARNING] Attribute device_type is set to 'cuda', but platform did not detect cuda. Setting device to 'cpu'.")
         device_type = "cpu"
     assert save_dir is not None, "[ERROR] Attribute save_dir should not be None"
 
@@ -123,9 +133,8 @@ def main_train(opts):
         #   then simply remove it, preventing from thorwing error message in load_checkpoint
         if not is_anyCheckpoint:
             shutil.rmtree(save_dir)
-            logger.info(
-                f"Delete folder {save_dir} since it didn't content any checkpoint"
-            )
+            if is_master_node:
+                logger.info(f"Delete folder {save_dir} since it didn't content any checkpoint")
 
     # Load from previous checkpint if there exists a useful checkpoint,
     #   or create a new checkpoint to store the training information
@@ -156,22 +165,24 @@ def main_train(opts):
     #
     
     ### DistributedDataParallel Initialization ###
-    opts = ddp.setup(opts)
-    num_gpus = getattr(opts, "ddp.num_gpus", -1)
-    device_type = getattr(opts, "model.device_type", "cpu")
+    num_gpus = torch.cuda.device_count()
+    setattr(opts, "ddp.num_gpus", num_gpus)
 
-    model = model.to(device_type)
     if num_gpus == 1:
         #
-        logger.info(f"Using Single GPU")
+        if is_master_node:
+            logger.info(f"Using Single GPU")
+        model = model.to(device_type)
     elif num_gpus > 1:
         #
-        logger.info(f"Using Multiple GPUs ({num_gpus})")
-        
-        # 
-        local_rank = getattr(opts, "ddp.local_rank", -1)
+        if is_master_node:
+            logger.info(f"Using Multiple GPUs ({num_gpus})")
+        #
+        local_rank = getattr(opts, "local_rank", -1)
+        device = torch.device(device_type, local_rank)
+        model = model.to(device)
         torch.cuda.set_device(local_rank)
-        dist.init_process_group(backend="nccl")
+        # dist.init_process_group(backend="nccl")
         model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
     ### Trainer ###
